@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru" class="ctc-doc">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Город CrossTech - интерактивная карта</title>
+  <meta name="description" content="Интерактивная карта кибергорода CrossTech: здания отделов, машины, жители.">
+  <meta name="theme-color" content="#6f8f2e">
+  <link rel="stylesheet" href="css/city.css">
+</head>
+<body>
+
+  <!--
+    Корневой блок карты. При встраивании прямо в страницу сайта достаточно
+    перенести этот <section>, <dialog> ниже и подключить css/js (см. README).
+    Карта в реальном размере макета; data-scale="0.6" — уменьшить, если понадобится.
+  -->
+  <section class="ctc" id="ctc-city" data-state="loading"
+           aria-labelledby="ctc-title" aria-describedby="ctc-help">
+    <h1 class="ctc-sr" id="ctc-title">Интерактивная карта города CrossTech</h1>
+    <p class="ctc-sr" id="ctc-help">Здания на карте — кнопки. Нажмите на здание или выберите его клавишей Tab и нажмите Enter, чтобы открыть описание.</p>
+
+    <div class="ctc-viewport" tabindex="-1">
+      <div class="ctc-sizer">
+        <div class="ctc-stage" role="group" aria-label="Карта города">
+          <img class="ctc-bg" alt="" width="3029" height="2274" fetchpriority="high"
+               src="assets/map/city-bg-small.webp"
+               data-src-small="assets/map/city-bg-small.webp"
+               data-src-full="assets/map/city-bg.webp">
+          <div class="ctc-world"></div>
+          <div class="ctc-clouds" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ctc-hint" aria-hidden="true"></div>
+    <div class="ctc-loader" aria-hidden="true">Загружаем город…</div>
+    <noscript><p style="position:absolute;inset:auto 0 0 0;margin:0;padding:12px;background:#fff;text-align:center">Для интерактивной карты включите JavaScript.</p></noscript>
+  </section>
+
+  <dialog class="ctc-dialog" id="ctc-dialog" aria-labelledby="ctc-dialog-title" aria-describedby="ctc-dialog-text">
+    <div class="ctc-card">
+      <div class="ctc-card__head">
+        <span class="ctc-tag" hidden></span>
+        <button class="ctc-close" type="button" aria-label="Закрыть">
+          <svg viewBox="0 0 36.3384 36.3384" aria-hidden="true" focusable="false">
+            <circle cx="18.1692" cy="18.1692" r="18.1692"/>
+            <path d="M11.0231 22.134L15.3292 17.8278L11.0762 13.5748L13.5748 11.0762L17.8278 15.3292L22.134 11.0231L24.7389 13.628L20.4328 17.9342L24.6858 22.1871L22.1871 24.6858L17.9342 20.4328L13.628 24.7389L11.0231 22.134Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="ctc-card__pic"><img alt="" width="986" height="836" decoding="async"></div>
+      <div class="ctc-card__body">
+        <h2 class="ctc-card__title" id="ctc-dialog-title"></h2>
+        <div class="ctc-card__text" id="ctc-dialog-text"></div>
+      </div>
+      <div class="ctc-card__actions" hidden><a class="ctc-btn" href="#"></a></div>
+    </div>
+  </dialog>
+
+  <script src="js/links.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/scene-data.js"></script>
+  <script src="js/city.js"></script>
+</body>
+</html>

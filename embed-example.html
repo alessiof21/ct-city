@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Пример встраивания карты через iframe</title>
+  <style>
+    body { margin: 0; font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color: #1d1d1f; background: #f4f4f6; }
+    main { max-width: 1280px; margin: 0 auto; padding: 32px 16px 64px; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    p { margin: 0 0 24px; color: #555; }
+    pre { overflow: auto; padding: 16px; border-radius: 12px; background: #1d1f24; color: #e6e6e6; font-size: 13px; }
+
+    /* ↓ Всё, что нужно на стороне сайта: */
+    .city-frame {
+      display: block;
+      width: 100%;
+      height: min(100svh, 900px); /* «окно» на карту; сама карта в реальном размере, её двигают */
+      border: 0;
+      border-radius: 16px;
+      background: #6f8f2e;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Город CrossTech</h1>
+    <p>Пример страницы сайта, в которую карта встроена через iframe. Текст над и под картой — обычная вёрстка сайта.</p>
+
+    <iframe class="city-frame" src="index.html" title="Интерактивная карта города CrossTech" loading="lazy" allowfullscreen></iframe>
+
+    <p style="margin-top:24px">Код встраивания:</p>
+<pre>&lt;iframe class="city-frame" src="/city/index.html"
+        title="Интерактивная карта города CrossTech"
+        loading="lazy" allowfullscreen&gt;&lt;/iframe&gt;
+
+.city-frame {
+  display: block;
+  width: 100%;
+  height: min(100svh, 900px);
+  border: 0;
+}</pre>
+  </main>
+</body>
+</html>
