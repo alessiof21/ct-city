@@ -1024,8 +1024,9 @@
     walk = { nodes: nodes, list: Object.keys(nodes).map(function (k2) { return nodes[k2]; }) };
   }
 
+  // ?v= — сбросить кэш GitHub Pages после замены спрайта (имя файла то же)
   var WALK_SPRITES = {
-    m1: { up: 'assets/people/walk-m1-lu.webp', down: 'assets/people/walk-m1-ld.webp' },
+    m1: { up: 'assets/people/walk-m1-lu.webp', down: 'assets/people/walk-m1-ld.webp?v=20261022c' },
     m2: { up: 'assets/people/walk-m2-lu.webp', down: 'assets/people/walk-m2-ld.webp' }
   };
 
