@@ -1048,7 +1048,7 @@
   }
   Walker.prototype.segLen = function () { return Math.hypot(this.to.x - this.from.x, this.to.y - this.from.y) || 1; };
   Walker.prototype.step = function (dt) {
-    if (this.wait > 0) { this.wait -= dt; return; }
+    if (this.wait > 0) { this.wait -= dt; this.stopped = true; if (this.wait <= 0) this.dist = 0; return; }
     var L = this.segLen();
     // перед зеброй — пропустить машины
     var edge = null;
@@ -1056,23 +1056,35 @@
     if (edge && edge.crossing && this.t < 0.02) {
       var mx = (this.from.x + this.to.x) / 2, my = (this.from.y + this.to.y) / 2;
       for (var c = 0; c < cars.length; c++) {
-        if (!cars[c].hidden && Math.hypot(cars[c].x - mx, cars[c].y - my) < 170) { this.idle = true; return; }
+        if (!cars[c].hidden && Math.hypot(cars[c].x - mx, cars[c].y - my) < 170) { this.idle = this.stopped = true; return; }
       }
     }
-    // другой пешеход впереди: попутный — подождать, встречный — развернуться (дорожки узкие, обойти негде)
+    // другой пешеход впереди: встречный — развернуться (дорожки узкие, обойти негде);
+    // попутный — идти за ним с его скоростью, вплотную — встать и тронуться, только когда он отойдёт
+    // (без запаса по расстоянию задний каждый кадр то стоял, то шёл — анимация дёргалась)
+    var follow = null, followAt = 1e9;
     for (var q = 0; q < walkers.length; q++) {
       var o = walkers[q];
       if (o === this) continue;
       var ox = o.x - this.x, oy = o.y - this.y;
       var ahead = ox * this.hx + oy * this.hy;
-      if (ahead <= 0 || ahead > 34 || Math.abs(ox * this.hy - oy * this.hx) > 14) continue;
-      if (o.hx * this.hx + o.hy * this.hy > 0) { this.idle = true; return; }
+      if (ahead <= 0 || ahead > 48 || Math.abs(ox * this.hy - oy * this.hx) > 14) continue;
+      if (o.hx * this.hx + o.hy * this.hy > 0) { if (ahead < followAt) { follow = o; followAt = ahead; } continue; }
+      if (ahead > 34) continue;
       var f = this.from; this.from = this.to; this.to = f; this.t = 1 - this.t;
+      follow = null;
       break;
     }
+    var v = this.v;
+    if (follow) {
+      if (followAt < (this.idle ? 32 : 26)) { this.idle = this.stopped = true; return; }
+      v = Math.min(v, follow.wait > 0 || follow.idle ? v * 0.5 : follow.v);
+    }
     this.idle = false;
+    // после остановки шаг начинается с первого кадра цикла, а не с середины
+    if (this.stopped) { this.stopped = false; this.dist = 0; }
     this.zMin = edge ? edge.z : 0;
-    var ds = this.v * dt;
+    var ds = v * dt;
     this.t += ds / L;
     this.dist += ds;
     if (this.t >= 1) {
