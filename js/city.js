@@ -506,7 +506,7 @@
     var nodes = {};
     Object.keys(R.nodes).forEach(function (id) {
       var n = R.nodes[id];
-      nodes[id] = { id: id, x: n.x, y: n.y, type: n.type || 'junction', to: n.to, hold: n.hold || 0, out: [] };
+      nodes[id] = { id: id, x: n.x, y: n.y, type: n.type || 'junction', to: n.to, hold: n.hold || 0, exit: n.exit !== false, out: [] };
     });
     var TRIM = TRIM_R;
     var lanes = [];
@@ -794,12 +794,18 @@
   }
 
   function spawnCar() {
-    // на парковку едут, только если у стоянки нет очереди: никто не ждёт заезда или выезда
+    // на парковку едут, только если у стоянки нет очереди: никто не ждёт заезда или выезда,
+    // никто не выезжает — ни отсюда, ни транзитом через неё (иначе новая машина ждала бы выезда на съезде)
     var order = lots.slice().sort(function () { return Math.random() - 0.5; });
     for (var li = 0; li < order.length; li++) {
-      var lot = order[li];
-      var busy = lot.waitingOut > 0 || lot.urgent || (lot.via && lot.out) ||
-        cars.some(function (c) { return c.lot === lot && c.phase === 'in' && !c.entered; });
+      var lot = order[li], V = lot.via;
+      var busy = lot.waitingOut > 0 || lot.urgent || lot.out || (V && (V.urgent || V.out)) ||
+        cars.some(function (c) {
+          if (c.lot === lot && c.phase === 'in' && !c.entered) return true;
+          // транзитный выезд с настила скоро займёт шлюз (подъём по съезду и заезд на место — ~25 с)
+          var VO = c.lot && c.lot.via === lot && c.phase === 'out' && !c.viaOutDone && c.route.viaOut;
+          return VO && VO[0] - c.s < 1300;
+        });
       if (busy || Math.random() >= lot.P.chance) continue;
       var freeSlots = lot.slots.filter(function (sl) { return !sl.busy; });
       if (!freeSlots.length) continue;
@@ -835,9 +841,21 @@
 
   function chooseNext(car) {
     var node = car.lane.to;
-    var opts = node.out.filter(function (l) { return l.edge !== car.lane.edge; });
+    var opts = node.out.filter(function (l) { return l.edge !== car.lane.edge && l.to.exit; });
+    if (!opts.length) opts = node.out.filter(function (l) { return l.edge !== car.lane.edge; });
     if (!opts.length) opts = node.out;
     return pick(opts);
+  }
+
+  // едет ли кто-то к шлюзу стоянки и ещё не прошёл его: к ней самой или транзитом через неё
+  function approaching(lot) {
+    for (var i = 0; i < cars.length; i++) {
+      var c = cars[i];
+      if (c.dead || c.phase !== 'in') continue;
+      if (c.lot === lot && !c.entered) return true;
+      if (c.lot && c.lot.via === lot && !c.viaIn && !c.viaDone) return true;
+    }
+    return false;
   }
 
   function stepCar(car, dt) {
@@ -850,13 +868,10 @@
       // ждёт выезда дольше 8 с — новые машины придерживаются наверху съезда, пока она не уедет
       if (car.parked < -8 && !lot.urgent) lot.urgent = car;
       if (lot.inCars > 0 || lot.out) return;
-      // иначе заезд в приоритете: если кто-то уже ждёт наверху съезда, сначала пропускаем его
-      if (lot.urgent !== car) {
-        for (var wi = 0; wi < cars.length; wi++) {
-          var wc = cars[wi];
-          if (wc.lot === lot && wc.phase === 'in' && !wc.entered && wc.s > lot.stopS - 160) return;
-        }
-      }
+      if (lot.urgent && lot.urgent !== car) return;   // кто-то ждёт выезда дольше (в том числе транзитом с настила)
+      // заезд в приоритете: пока кто-то едет к шлюзу (сюда или транзитом), стоим на месте —
+      // ждать на парковке естественно, а в очереди на съезде машина выглядит застрявшей
+      if (approaching(lot)) return;
       if (lot.urgent === car) lot.urgent = null;
       car.wantOut = false; lot.waitingOut--;
       lot.out = car;
@@ -912,10 +927,18 @@
     if (node && node.type === 'junction') {
       var toEnd = car.path.total - car.s;
       if (toEnd < T.lockRadius - TRIM_R) {
-        if (!locks[node.id] || locks[node.id] === car) {
+        // очередь честная: свободный перекрёсток достаётся тому, кто дольше ждёт у стоп-линии
+        var first = true;
+        if (!locks[node.id]) for (var qi = 0; qi < cars.length; qi++) {
+          var qc = cars[qi];
+          if (qc !== car && !qc.dead && qc.lockWait > (car.lockWait || 0) + 0.3 && qc.lane.to === node && qc.path === qc.lane.path) { first = false; break; }
+        }
+        if (locks[node.id] === car || (!locks[node.id] && first)) {
+          car.lockWait = 0;
           if (car.lock && car.lock !== node.id) releaseLock(car);
           locks[node.id] = car; car.lock = node.id; car.lockNode = node;
         } else {
+          car.lockWait = (car.lockWait || 0) + dt;
           { var lim = Math.max(0, (toEnd - 40) * 1.5); if (lim < 1) car.why = 'lock' + (typeof o !== 'undefined' && o && o.id ? ':' + o.id : ''); target = Math.min(target, lim); }   // стоп-линия
         }
       }
@@ -925,10 +948,10 @@
     }
     if (car.phase === 'in') {
       // «шлюз» плато: за стоп-линию наверху съезда — только если никто не выезжает.
-      // Заезд в приоритете: выезжающие ждут на месте, пока на плато никто не едет (мест конечное число, так что очередь не вечная)
+      // Заезд в приоритете: выезжающие ждут на месте, пока на плато никто не едет (мест конечное число, так что очередь не вечная).
+      // urgent на подъезде не держит (иначе стояли бы на съезде по полминуты) — он только запрещает отправлять новые машины
       if (!car.entered) {
-        // у транзитной стоянки urgent не держит на подъезде (иначе стояли бы на съезде по минуте) — он только запрещает новые заезды
-        var stopS = lot.stopS, mayEnter = !lot.out && (lot.via || !lot.urgent);
+        var stopS = lot.stopS, mayEnter = !lot.out;
         if (mayEnter && car.s >= stopS - 60) { car.entered = true; lot.inCars++; }
         else if (!mayEnter) { var lim = Math.max(0, (stopS - 60 - car.s) * 1.5); if (lim < 1) car.why = 'lotgate' + (typeof o !== 'undefined' && o && o.id ? ':' + o.id : ''); target = Math.min(target, lim); }
       }
@@ -937,7 +960,7 @@
       var VI = car.route.viaIn, VL = lot.via;
       if (VI && !car.viaDone) {
         if (!car.viaIn) {
-          var vOk = !VL.out && !VL.urgent;
+          var vOk = !VL.out;
           if (vOk && car.s >= VI[0] - 60) { car.viaIn = true; VL.inCars++; }
           else if (!vOk) { var lim = Math.max(0, (VI[0] - 60 - car.s) * 1.5); if (lim < 1) car.why = 'via-in' + (typeof o !== 'undefined' && o && o.id ? ':' + o.id : ''); target = Math.min(target, lim); }
         } else if (car.s > VI[1]) { car.viaIn = false; car.viaDone = true; VL.inCars--; }
@@ -949,7 +972,8 @@
       var VL2 = lot.via;
       if (!car.viaOut) {
         if (car.s >= VO[0] - 150) {
-          if (!VL2.out && VL2.inCars <= 0 && (!VL2.urgent || VL2.urgent === car)) {
+          // как и выезд с плато, уступаем тем, кто уже поднимается к шлюзу
+          if (!VL2.out && VL2.inCars <= 0 && (!VL2.urgent || VL2.urgent === car) && !approaching(VL2)) {
             car.viaOut = true; VL2.out = car;
             if (VL2.urgent === car) VL2.urgent = null;
           } else {
@@ -1332,7 +1356,17 @@
     var stopped = {}, prevIds = {};
     var prevOut = [], outHold = [];
     var origRemove = Car.prototype.remove;
-    Car.prototype.remove = function () { stats.removed++; origRemove.call(this); };
+    var lastStop = {};   // id → { t: сколько стояла, at: где, ago: сколько прошло после стоянки }
+    Car.prototype.remove = function () {
+      stats.removed++;
+      var ls = lastStop[this.id];
+      if (ls && ls.t > 5 && ls.ago < 6) {   // долго стояла и почти сразу исчезла
+        stats.vanishAfterStop = stats.vanishAfterStop || {};
+        var k = ls.at + ' → ' + this.lane.to.id;
+        stats.vanishAfterStop[k] = Math.max(stats.vanishAfterStop[k] || 0, +ls.t.toFixed(1));
+      }
+      origRemove.call(this);
+    };
     for (var s = 0; s < steps; s++) {
       spawnTimer -= dt;
       if (spawnTimer <= 0 && cars.length < CFG.traffic.count) {
@@ -1354,15 +1388,25 @@
       for (i = 0; i < cars.length; i++) {
         var c = cars[i];
         if (c.hidden > 0) continue;
-        SCENE.decor.forEach(function (d, di) {      // машина «под» декором (остановкой, скамейкой)
-          if (c.y < d.z && c.x + 34 > d.x && c.x - 34 < d.x + d.w && c.y > d.y && c.y - 50 < d.y + d.h) {
+        SCENE.decor.forEach(function (d, di) {      // машина «под» декором (остановкой, скамейкой); за «заслонку» — нарочно
+          if (!d.occluder && c.y < d.z && c.x + 34 > d.x && c.x - 34 < d.x + d.w && c.y > d.y && c.y - 50 < d.y + d.h) {
             stats.decorHits = stats.decorHits || {};
             var key = di + ' ' + d.src.split('/').pop() + ' @' + Math.round(d.x) + ',' + Math.round(d.y);
             stats.decorHits[key] = (stats.decorHits[key] || 0) + 1;
           }
         });
         if (c.v < 1 && c.parked == null) stopped[c.id] = (stopped[c.id] || 0) + dt; else stopped[c.id] = 0;
-        if (c.parked != null) stats.parkedFrames = (stats.parkedFrames || 0) + 1;
+        if (stopped[c.id] > 1) lastStop[c.id] = { t: stopped[c.id], ago: 0, at: c.lane.from.id + '>' + c.lane.to.id + ' @' + Math.round(c.x) + ',' + Math.round(c.y) + ' why=' + (c.why || '?').split(':')[0] };
+        else if (lastStop[c.id]) lastStop[c.id].ago += dt;
+        if (stopped[c.id] > 2 && c.opacity() < 0.95) {   // стоит полупрозрачной (в зоне появления/исчезания у тоннеля)
+          stats.fadeStops = stats.fadeStops || {};
+          var fk = c.lane.from.id + '>' + c.lane.to.id + ' @' + Math.round(c.x / 20) * 20 + ',' + Math.round(c.y / 20) * 20 + ' op=' + c.opacity().toFixed(2) + ' why=' + (c.why || '?').split(':')[0];
+          stats.fadeStops[fk] = Math.max(stats.fadeStops[fk] || 0, +stopped[c.id].toFixed(1));
+        }
+        if (c.parked != null) {   // средняя заполненность стоянок: сколько мест занято в среднем
+          stats.parkedAvg = stats.parkedAvg || lots.map(function () { return 0; });
+          stats.parkedAvg[lots.indexOf(c.lot)] += 1 / steps;
+        }
         if (c.parked != null && c.parked < 0) stats.maxLeaveWait = Math.max(stats.maxLeaveWait || 0, +(-c.parked).toFixed(1));
         if (stopped[c.id] > 6) {
           stats.longStops = stats.longStops || {};
@@ -1397,6 +1441,7 @@
     stats.lots = lots.map(function (lot) { return { inCars: lot.inCars, out: lot.out && lot.out.id, waitingOut: lot.waitingOut,
       slots: lot.slots.map(function (sl) { var c = sl.busy; return c ? c.id + ':' + c.phase + (c.entered ? '+' : '') + (c.wantOut ? 'w' : '') + '@' + Math.round(c.x) + ',' + Math.round(c.y) + ' v' + c.v.toFixed(0) : '-'; }) }; });
     stats.carsAvg = +stats.carsAvg.toFixed(2);
+    if (stats.parkedAvg) stats.parkedAvg = stats.parkedAvg.map(function (v) { return +v.toFixed(2); });
     var pre = el('pre', '', document.body);
     pre.id = 'ctc-selftest';
     pre.textContent = JSON.stringify(stats);
