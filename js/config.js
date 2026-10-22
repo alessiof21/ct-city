@@ -240,7 +240,6 @@ window.CTC_CONFIG = {
   clouds: [
     { x: -664, y: -370, w: 1561, h: 1001, rot: 2.8, opacity: 0.76, dx: 140, dur: 64 },
     { x: -408, y: 354,  w: 687,  h: 420,  rot: 0,   opacity: 0.61, dx: 110, dur: 48 },
-    { x: 1560, y: 2231, w: 947,  h: 518,  rot: 0,   opacity: 0.59, dx: -120, dur: 56 },
     { x: 2073, y: -449, w: 1517, h: 928,  rot: 0,   opacity: 0.76, dx: -150, dur: 72 }
   ]
 };

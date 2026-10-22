@@ -33,6 +33,17 @@
     if (parent) parent.appendChild(n);
     return n;
   }
+  // Картинка сцены: если не загрузилась — прячем (у img с размерами Chrome рисует рамку «битой картинки»)
+  // и пробуем ещё раз; после второй неудачи так и остаётся скрытой.
+  function setSrc(img, src) {
+    var tries = 0;
+    img.onerror = function () {
+      img.style.visibility = 'hidden';
+      if (tries++ < 2) setTimeout(function () { img.src = src + (src.indexOf('?') < 0 ? '?' : '&') + 'retry=' + tries; }, 700 * tries);
+    };
+    img.onload = function () { img.style.visibility = ''; };
+    img.src = src;
+  }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function rand(a, b) { return a + Math.random() * (b - a); }
   function pick(arr) { return arr[(Math.random() * arr.length) | 0]; }
@@ -133,7 +144,7 @@
         img.decoding = 'async';
         img.draggable = false;
         if (p.size) { img.width = p.size[0]; img.height = p.size[1]; }
-        img.src = p.src;
+        setSrc(img, p.src);
         img.style.left = pct(p.img[0]);
         img.style.top = pct(p.img[1]);
         img.style.width = pct(p.img[2]);
@@ -246,7 +257,25 @@
       var img = el('img', '', n);
       img.alt = '';
       img.decoding = 'async';
-      img.src = d.src;
+      setSrc(img, d.src);
+    });
+    // Анимированные вставки поверх подложки (водопад — оригинальный GIF из макета, 3,6 МБ).
+    // Лежат под всеми зданиями и машинами. Грузятся лениво и невидимыми; проявляются, когда файл загрузился —
+    // до этого видна та же картинка на подложке, неподвижно. Без анимации не нужны вовсе.
+    if (REDUCED) return;
+    (SCENE.anims || []).forEach(function (a) {
+      var n = el('div', 'ctc-decor ctc-anim', world);
+      n.style.width = px(a.w);
+      n.style.height = px(a.h);
+      n.style.transform = 'translate(' + px(a.x) + ',' + px(a.y) + ')';
+      n.style.zIndex = 1;
+      var img = el('img', '', n);
+      img.alt = '';
+      img.decoding = 'async';
+      img.loading = 'lazy';
+      img.setAttribute('fetchpriority', 'low');
+      img.addEventListener('load', function () { n.classList.add('is-loaded'); });
+      setSrc(img, a.src);
     });
   }
 
@@ -276,7 +305,7 @@
       if (c.rot) n.style.transform = 'rotate(' + c.rot + 'deg)';
       var img = el('img', '', n);
       img.alt = '';
-      img.src = 'assets/map/cloud.webp';
+      setSrc(img, 'assets/map/cloud.webp');
       img.decoding = 'async';
       img.style.setProperty('--ctc-dx', px((small ? 0.6 : 1) * c.dx));
       img.style.setProperty('--ctc-dur', (c.dur * (small ? 1.25 : 1)) + 's');
@@ -1048,11 +1077,13 @@
     walk = { nodes: nodes, list: Object.keys(nodes).map(function (k2) { return nodes[k2]; }) };
   }
 
+  // Полоска: 10 кадров ходьбы + 11-й — «стоит» (макет: последний кадр в полосках «… идёт …»).
   // ?v= — сбросить кэш GitHub Pages после замены спрайта (имя файла то же)
   var WALK_SPRITES = {
-    m1: { up: 'assets/people/walk-m1-lu.webp', down: 'assets/people/walk-m1-ld.webp?v=20261022c' },
-    m2: { up: 'assets/people/walk-m2-lu.webp', down: 'assets/people/walk-m2-ld.webp' }
+    m1: { up: 'assets/people/walk-m1-lu.webp?v=20261022j', down: 'assets/people/walk-m1-ld.webp?v=20261022j' },
+    m2: { up: 'assets/people/walk-m2-lu.webp?v=20261022j', down: 'assets/people/walk-m2-ld.webp?v=20261022j' }
   };
+  var WALK_FRAMES = 10, STAND_FRAME = 10;
 
   function Walker(kind, node, lateral) {
     this.kind = kind;
@@ -1131,10 +1162,10 @@
     var up = this.hy < 0;
     var flip = this.hx > 0;
     var stride = CFG.walkers.stride;
-    var frame = (this.wait > 0 || this.idle) ? 0 : Math.floor(this.dist / (stride / 10)) % 10;
+    var frame = (this.wait > 0 || this.idle) ? STAND_FRAME : Math.floor(this.dist / (stride / WALK_FRAMES)) % WALK_FRAMES;
     if (up !== this.dirUp) { this.dirUp = up; this.sp.style.backgroundImage = 'url(' + (up ? this.sprites.up : this.sprites.down) + ')'; }
     if (flip !== this.flip) { this.flip = flip; this.el.classList.toggle('is-flip', flip); }
-    if (frame !== this.frame) { this.frame = frame; this.sp.style.backgroundPosition = (frame * 100 / 9) + '% 0'; }
+    if (frame !== this.frame) { this.frame = frame; this.sp.style.backgroundPosition = (frame * 100 / STAND_FRAME) + '% 0'; }
     this.el.style.transform = 'translate3d(' + (this.x - 9.1).toFixed(1) + 'px,' + (this.y - 45).toFixed(1) + 'px,0)';
     var z = Math.round(Math.max(this.y, this.zMin || 0));
     if (z !== this.z) { this.z = z; this.el.style.zIndex = z; }
@@ -1163,7 +1194,7 @@
       img.alt = '';
       img.decoding = 'async';
       img.width = 56; img.height = 144;
-      img.src = 'assets/people/stand-' + p.who + '.webp';
+      setSrc(img, 'assets/people/stand-' + p.who + '.webp');
       var dur = rand(3.4, 5.2);
       img.style.setProperty('--ctc-bd', dur.toFixed(2) + 's');
       img.style.setProperty('--ctc-bdelay', (-rand(0, dur)).toFixed(2) + 's');
