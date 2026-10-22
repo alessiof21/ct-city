@@ -31,7 +31,7 @@ html.ctc-doc, html.ctc-doc body {
   height: 100%;
   background: #6f8f2e;
 }
-html.ctc-doc, html.ctc-doc body { overflow: hidden; }   /* на странице стенда только карта — прокрутка не нужна */
+html.ctc-doc, html.ctc-doc body { overflow: hidden; overscroll-behavior: none; }   /* на странице стенда только карта — прокрутка не нужна */
 html.ctc-lock { overflow: hidden; }
 
 /* ------------------------------------------------------------------ корень */
@@ -73,7 +73,7 @@ html.ctc-lock { overflow: hidden; }
   position: absolute;
   inset: 0;
   overflow: hidden;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;   /* без «резиновой» оттяжки за край карты (iOS Safari показывал фон страницы) */
   scrollbar-width: none;
   outline: none;
 }
