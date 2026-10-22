@@ -153,14 +153,87 @@
             openPopup(b.popup, hit, bld);
           });
           hit.addEventListener('focus', function () {
-            if (hit.matches(':focus-visible')) bld.classList.add('is-kbd-focus');
+            if (hit.matches(':focus-visible')) { bld.classList.add('is-kbd-focus'); showTip(b, popup); }
           });
-          hit.addEventListener('blur', function () { bld.classList.remove('is-kbd-focus'); });
-          hit.addEventListener('pointerenter', function () { preloadPopup(b.popup); });
+          hit.addEventListener('blur', function () { bld.classList.remove('is-kbd-focus'); hideTip(b); });
+          hit.addEventListener('pointerenter', function (e) {
+            preloadPopup(b.popup);
+            if (e.pointerType === 'mouse' || e.pointerType === 'pen') showTip(b, popup);
+          });
+          hit.addEventListener('pointerleave', function () { hideTip(b); });
           buildingsById[b.id] = { el: bld, hit: hit, data: b };
         }
       });
     });
+  }
+
+  /* ============================================================ плашка с названием при наведении */
+  // Макет: Figma 671:1276 «Блок с названием». Шестигранник с синей обводкой и указателем на здание.
+  // Живёт в координатах макета (внутри сцены), поэтому едет вместе с картой при прокрутке.
+  // Текст — popup.label, если задан, иначе popup.title. Длинное название переносится на 2 строки.
+  var TIP = { depth: 26, height: 66, arrowW: 31.18, arrowH: 27, gap: 4, margin: 8 };   // размеры из макета
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var tip = null, tipOwner = null;
+
+  function buildTip() {
+    tip = el('div', 'ctc-tip', stage);
+    tip.setAttribute('aria-hidden', 'true');   // название уже есть в aria-label кнопки здания
+    var svg = document.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('class', 'ctc-tip__shape');
+    svg.innerHTML = '<defs><clipPath id="ctc-tip-clip"><path/></clipPath></defs>' +
+      '<path class="ctc-tip__fill"/><path class="ctc-tip__stroke" clip-path="url(#ctc-tip-clip)"/><path class="ctc-tip__arrow"/>';
+    tip.appendChild(svg);
+    tip.svg = svg;
+    tip.paths = svg.querySelectorAll('path');
+    tip.text = el('span', 'ctc-tip__text', tip);
+  }
+
+  function showTip(b, popup) {
+    if (!tip || dialog.hasAttribute('open') || dragMoved) return;
+    tipOwner = b;
+    tip.text.textContent = popup.label || popup.title;
+    tip.text.style.paddingLeft = tip.text.style.paddingRight = '';
+    tip.classList.remove('is-below');
+    // высота (1 или 2 строки) задаёт глубину углов: пропорции шестигранника как в макете
+    var h = tip.text.offsetHeight;
+    var depth = Math.round(TIP.depth * h / TIP.height);
+    tip.text.style.paddingLeft = tip.text.style.paddingRight = px(depth + 7);
+    var w = tip.text.offsetWidth;
+
+    // якорь — середина верхней кромки здания; если сверху не помещается в видимую часть карты — под зданием
+    var v = b.vis, ax = v[0] + v[2] / 2;
+    var vx0 = Math.max(0, viewport.scrollLeft / k), vx1 = Math.min(W, (viewport.scrollLeft + viewport.clientWidth) / k);
+    var vy0 = Math.max(0, viewport.scrollTop / k);
+    var total = h + TIP.arrowH - 1;
+    var below = v[1] - TIP.gap - total < vy0 + TIP.margin;
+    var top = below ? v[1] + v[3] + TIP.gap : v[1] - TIP.gap - total;
+    var left = clamp(ax - w / 2, vx0 + TIP.margin, vx1 - TIP.margin - w);
+    var cx = clamp(ax - left, depth + TIP.arrowW, w - depth - TIP.arrowW);
+
+    var y0 = below ? TIP.arrowH - 1 : 0;   // верх шестигранника внутри плашки
+    var hex = 'M' + depth + ' ' + y0 + 'H' + (w - depth) + 'L' + w + ' ' + (y0 + h / 2) + 'L' + (w - depth) + ' ' + (y0 + h) +
+      'H' + depth + 'L0 ' + (y0 + h / 2) + 'Z';
+    var aw = TIP.arrowW / 2;
+    var arrow = below
+      ? 'M' + (cx - aw) + ' ' + TIP.arrowH + 'H' + (cx + aw) + 'L' + cx + ' 0Z'
+      : 'M' + (cx - aw) + ' ' + (h - 1) + 'H' + (cx + aw) + 'L' + cx + ' ' + total + 'Z';
+    tip.svg.setAttribute('width', w);
+    tip.svg.setAttribute('height', total);
+    tip.svg.setAttribute('viewBox', '0 0 ' + w + ' ' + total);
+    tip.paths[0].setAttribute('d', hex);
+    tip.paths[1].setAttribute('d', hex);
+    tip.paths[2].setAttribute('d', hex);
+    tip.paths[3].setAttribute('d', arrow);
+    tip.classList.toggle('is-below', below);
+    tip.style.left = px(Math.round(left));
+    tip.style.top = px(Math.round(top));
+    tip.classList.add('is-on');
+  }
+
+  function hideTip(b) {
+    if (!tip || (b && b !== tipOwner)) return;
+    tipOwner = null;
+    tip.classList.remove('is-on');
   }
 
   function buildDecor() {
@@ -289,6 +362,7 @@
 
   function openPopup(id, trigger, bld) {
     if (!CFG.popups[id] || closing) return;
+    hideTip();
     fillPopup(id);
     lastTrigger = trigger;
     activeBld = bld;
@@ -1143,7 +1217,7 @@
     window.addEventListener('pointermove', function (e) {
       if (!down) return;
       var dx = e.clientX - down.x, dy = e.clientY - down.y;
-      if (!dragMoved && Math.hypot(dx, dy) > 6) { dragMoved = true; viewport.classList.add('is-dragging'); }
+      if (!dragMoved && Math.hypot(dx, dy) > 6) { dragMoved = true; viewport.classList.add('is-dragging'); hideTip(); }
       if (dragMoved) { viewport.scrollLeft = down.sl - dx; viewport.scrollTop = down.st - dy; }
     });
     window.addEventListener('pointerup', function () {
@@ -1317,6 +1391,7 @@
 
   /* ============================================================ старт */
   function init() {
+    buildTip();
     buildBuildings();
     buildDecor();
     buildParkedCars();

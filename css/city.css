@@ -182,6 +182,54 @@ html.ctc-lock { overflow: hidden; }
   touch-action: manipulation;
 }
 
+/* ------------------------------------------------------------------ плашка с названием при наведении
+ * Макет Figma 671:1276. Положение и форму (шестигранник по размеру текста) считает JS.
+ */
+.ctc-tip {
+  position: absolute;
+  left: 0; top: 0;
+  z-index: 5500;               /* над облаками */
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  transition: opacity .2s var(--ctc-ease), transform .2s var(--ctc-ease), visibility 0s linear .2s;
+}
+.ctc-tip.is-below { transform: translateY(-6px); }
+.ctc-tip.is-on {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
+}
+.ctc-tip__shape {
+  position: absolute;
+  left: 0; top: 0;
+  display: block;
+  overflow: visible;
+}
+.ctc-tip__fill { fill: #f0f0f1; fill-opacity: .84; }
+.ctc-tip__stroke { fill: none; stroke: #5770f5; stroke-width: 6; }   /* половина обводки обрезана формой: 3 px внутрь, как в макете */
+.ctc-tip__arrow { fill: #5770f5; }
+.ctc-tip__text {
+  position: relative;
+  display: block;
+  box-sizing: content-box;
+  width: max-content;
+  max-width: 420px;            /* длиннее — перенос на вторую строку (самое длинное название как раз в 2 строки) */
+  margin-bottom: 26px;         /* место под указатель */
+  padding: 18.5px 33px;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 29px;
+  color: #000;
+  text-align: center;
+  text-shadow: 0 4px 4px rgba(0, 0, 0, .25);
+  text-wrap: balance;
+  white-space: normal;
+}
+.ctc-tip.is-below .ctc-tip__text { margin: 26px 0 0; }
+
 /* ------------------------------------------------------------------ декор, машины, люди */
 .ctc-decor, .ctc-car, .ctc-walker, .ctc-person {
   position: absolute;
@@ -497,6 +545,7 @@ html.ctc-shot *, html.ctc-shot *::before { transition: none !important; }
 /* ------------------------------------------------------------------ меньше движения */
 @media (prefers-reduced-motion: reduce) {
   .ctc-person > img, .ctc-cloud > img { animation: none; }
-  .ctc-card, .ctc-dialog, .ctc-bld, .ctc-hint { transition-duration: .01s; }
+  .ctc-card, .ctc-dialog, .ctc-bld, .ctc-hint, .ctc-tip { transition-duration: .01s; }
+  .ctc-tip, .ctc-tip.is-below { transform: none; }
   .ctc-card { transform: none; }
 }
