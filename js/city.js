@@ -608,9 +608,11 @@
               alt: tag !== '',
               zBias: tag ? (P.alt.zBias || 0) : (P.zBias || 0),   // поправка глубины машины на этом маршруте
               zBiasAboveY: tag ? P.alt.zBiasAboveY : null,           // …только выше этой линии (ниже — честно за зданием)
-              // участок чужого шлюза на пути: вход/выход туда (s по полосе) и ожидание/освобождение на обратном пути
+              // участок чужого шлюза на пути: вход/выход туда (s по полосе) и ожидание/освобождение на обратном пути.
+              // Ждём в 170 px от конца проезда: машина с крайнего места плато сдаёт задним ходом за его конец,
+              // и при 110 px подъезжала к ждущей почти вплотную — казалось, что проезжает сквозь неё
               viaIn: viaLot && [viaLot.stopS, sNear(inPath, viaLot.transit.end) + 40],
-              viaOut: viaLot && [sNear(outPath, viaLot.transit.end) - 110, sNear(outPath, viaLot.transit.release)],
+              viaOut: viaLot && [sNear(outPath, viaLot.transit.end) - 170, sNear(outPath, viaLot.transit.release)],
               lane: { id: 'park' + li + tag + '.' + i, edge: -1, from: gate, to: slotNode, path: inPath },
               back: back,
               outLane: { id: 'unpark' + li + tag + '.' + i, edge: -1, from: slotNode, to: gate, path: outPath },
